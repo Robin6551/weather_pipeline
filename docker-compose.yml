@@ -1,0 +1,66 @@
+version: "3.9"
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.1-python3.11
+  env_file:
+    - .env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    PYTHONPATH: /opt/airflow/src   
+  volumes:
+    - ./dags:/opt/airflow/dags     
+    - ./src:/opt/airflow/dags/src        
+    - ./logs:/opt/airflow/logs      
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: airflow_postgres_weather
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      retries: 5
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow_init_weather
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Robin \
+          --lastname User \
+          --role Admin \
+          --email robin67785@gmail.com
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow_webserver_weather
+    ports:
+      - "8081:8080"
+    command: airflow webserver
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler_weather
+    command: airflow scheduler
+
+volumes:
+  airflow_postgres_data:
